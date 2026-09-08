@@ -222,6 +222,18 @@ h1, h2, h3 {
   box-shadow: 1px 1px 0 var(--badge-black);
 }
 
+.share-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.secondary-btn-alt {
+  background: var(--forest);
+  color: #fff;
+}
+
 .link-btn {
   background: none;
   border: none;
