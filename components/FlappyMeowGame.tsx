@@ -38,6 +38,8 @@ function pipeSpeedForScore(score: number): number {
   return Math.min(MAX_PIPE_SPEED, BASE_PIPE_SPEED + score * SPEED_RAMP_PER_POINT);
 }
 
+const LAST_USERNAME_KEY = "flappyMeow:lastUsername";
+
 interface Pipe {
   x: number;
   gapY: number; // center of gap
@@ -150,6 +152,11 @@ export default function FlappyMeowGame() {
         avatarImgRef.current = img;
         setAvatar(data);
         setScreen("ready");
+        try {
+          localStorage.setItem(LAST_USERNAME_KEY, data.username);
+        } catch {
+          // localStorage unavailable (private browsing etc.) — not critical
+        }
       };
       img.onerror = () => {
         setAvatarError("Got the player, but couldn't load their avatar image.");
@@ -161,6 +168,24 @@ export default function FlappyMeowGame() {
       setScreen("menu");
     }
   }, []);
+
+  // One-time auto-load: if this device already has a remembered Roblox
+  // profile from a previous visit, jump straight to it instead of asking
+  // for the username again.
+  const triedAutoLoad = useRef(false);
+  useEffect(() => {
+    if (triedAutoLoad.current) return;
+    triedAutoLoad.current = true;
+    try {
+      const remembered = localStorage.getItem(LAST_USERNAME_KEY);
+      if (remembered) {
+        setUsernameInput(remembered);
+        fetchAvatar(remembered);
+      }
+    } catch {
+      // localStorage unavailable — just show the normal menu
+    }
+  }, [fetchAvatar]);
 
   const handleSubmitUsername = (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,18 +298,45 @@ export default function FlappyMeowGame() {
   };
 
   // ---------- Draw helpers ----------
-  const drawCloud = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) => {
+  const drawPine = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) => {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillStyle = "rgba(95, 156, 49, 0.35)";
     ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, Math.PI * 2);
-    ctx.arc(20, -6, 14, 0, Math.PI * 2);
-    ctx.arc(-18, -4, 13, 0, Math.PI * 2);
-    ctx.arc(6, 6, 16, 0, Math.PI * 2);
+    ctx.moveTo(0, -34);
+    ctx.lineTo(14, -10);
+    ctx.lineTo(7, -10);
+    ctx.lineTo(18, 8);
+    ctx.lineTo(9, 8);
+    ctx.lineTo(20, 26);
+    ctx.lineTo(-20, 26);
+    ctx.lineTo(-9, 8);
+    ctx.lineTo(-18, 8);
+    ctx.lineTo(-7, -10);
+    ctx.lineTo(-14, -10);
+    ctx.closePath();
     ctx.fill();
+    ctx.fillRect(-4, 26, 8, 8);
     ctx.restore();
+  };
+
+  const drawMountains = (ctx: CanvasRenderingContext2D) => {
+    ctx.fillStyle = "rgba(95, 156, 49, 0.25)";
+    ctx.beginPath();
+    ctx.moveTo(0, 210);
+    ctx.lineTo(50, 140);
+    ctx.lineTo(90, 180);
+    ctx.lineTo(150, 90);
+    ctx.lineTo(200, 160);
+    ctx.lineTo(250, 110);
+    ctx.lineTo(300, 175);
+    ctx.lineTo(350, 130);
+    ctx.lineTo(CANVAS_W, 200);
+    ctx.lineTo(CANVAS_W, 260);
+    ctx.lineTo(0, 260);
+    ctx.closePath();
+    ctx.fill();
   };
 
   const drawPipe = (ctx: CanvasRenderingContext2D, pipe: Pipe) => {
@@ -293,27 +345,27 @@ export default function FlappyMeowGame() {
     const bottomH = CANVAS_H - GROUND_HEIGHT - bottomY;
 
     const grad = ctx.createLinearGradient(pipe.x, 0, pipe.x + PIPE_WIDTH, 0);
-    grad.addColorStop(0, "#37d6c0");
-    grad.addColorStop(1, "#1fb39f");
+    grad.addColorStop(0, "#8fc656");
+    grad.addColorStop(1, "#4a7a26");
 
     // top pipe
     ctx.fillStyle = grad;
     ctx.fillRect(pipe.x, 0, PIPE_WIDTH, topH);
-    ctx.fillStyle = "#ffffff55";
+    ctx.fillStyle = "#3d2b1a";
     ctx.fillRect(pipe.x, Math.max(0, topH - 18), PIPE_WIDTH, 18);
 
     // bottom pipe
     ctx.fillStyle = grad;
     ctx.fillRect(pipe.x, bottomY, PIPE_WIDTH, bottomH);
-    ctx.fillStyle = "#ffffff55";
+    ctx.fillStyle = "#3d2b1a";
     ctx.fillRect(pipe.x, bottomY, PIPE_WIDTH, 18);
   };
 
   const drawGround = (ctx: CanvasRenderingContext2D, offset: number) => {
     const y = CANVAS_H - GROUND_HEIGHT;
-    ctx.fillStyle = "#ffe9c9";
+    ctx.fillStyle = "#5b4227";
     ctx.fillRect(0, y, CANVAS_W, GROUND_HEIGHT);
-    ctx.fillStyle = "#ffd8a0";
+    ctx.fillStyle = "#71542f";
     const stripeW = 40;
     for (let x = -stripeW + (offset % stripeW); x < CANVAS_W; x += stripeW) {
       ctx.fillRect(x, y, stripeW / 2, 14);
@@ -328,7 +380,7 @@ export default function FlappyMeowGame() {
     ctx.rotate(angle);
 
     // little wing flap circle behind avatar for flair
-    ctx.fillStyle = "#ff6fa5";
+    ctx.fillStyle = "#ffce54";
     ctx.beginPath();
     ctx.ellipse(-6, 8, 10, 6, angle, 0, Math.PI * 2);
     ctx.fill();
@@ -341,13 +393,13 @@ export default function FlappyMeowGame() {
     if (img) {
       ctx.drawImage(img, -BIRD_RADIUS, -BIRD_RADIUS, BIRD_RADIUS * 2, BIRD_RADIUS * 2);
     } else {
-      ctx.fillStyle = "#ffc94a";
+      ctx.fillStyle = "#ffce54";
       ctx.fillRect(-BIRD_RADIUS, -BIRD_RADIUS, BIRD_RADIUS * 2, BIRD_RADIUS * 2);
     }
     ctx.restore();
 
     ctx.lineWidth = 3;
-    ctx.strokeStyle = "#fff7fc";
+    ctx.strokeStyle = "#8fc656";
     ctx.beginPath();
     ctx.arc(0, 0, BIRD_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
@@ -419,17 +471,19 @@ export default function FlappyMeowGame() {
 
       // ---- draw ----
       const bgGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      bgGrad.addColorStop(0, "#ffd9ec");
-      bgGrad.addColorStop(1, "#bfe9ff");
+      bgGrad.addColorStop(0, "#1b2a12");
+      bgGrad.addColorStop(1, "#0a0d08");
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+      drawMountains(ctx);
 
       cloudsRef.current.forEach((c) => {
         if (isPlaying) {
           c.x -= speed * 0.3 * dt;
           if (c.x < -50) c.x = CANVAS_W + 50;
         }
-        drawCloud(ctx, c.x, c.y, c.scale);
+        drawPine(ctx, c.x, c.y, c.scale);
       });
 
       state.pipes.forEach((p) => drawPipe(ctx, p));
@@ -490,12 +544,17 @@ export default function FlappyMeowGame() {
 
         <div
           className="canvas-wrap"
-          onPointerDown={handleCanvasPress}
           role="button"
           tabIndex={0}
           aria-label="Game area — tap or press space to flap"
         >
-          <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} className="game-canvas" />
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_W}
+            height={CANVAS_H}
+            className="game-canvas"
+            onPointerDown={handleCanvasPress}
+          />
 
           {screen !== "playing" && (
             <div className="hud-score">Score {screen === "gameover" ? score : ""}</div>
@@ -549,6 +608,12 @@ export default function FlappyMeowGame() {
               <button
                 className="link-btn"
                 onClick={() => {
+                  try {
+                    localStorage.removeItem(LAST_USERNAME_KEY);
+                  } catch {
+                    // ignore
+                  }
+                  setUsernameInput("");
                   setScreen("menu");
                   setAvatar(null);
                 }}
@@ -577,6 +642,12 @@ export default function FlappyMeowGame() {
               <button
                 className="link-btn"
                 onClick={() => {
+                  try {
+                    localStorage.removeItem(LAST_USERNAME_KEY);
+                  } catch {
+                    // ignore
+                  }
+                  setUsernameInput("");
                   setScreen("menu");
                   setAvatar(null);
                 }}
