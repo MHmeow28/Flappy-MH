@@ -1,16 +1,18 @@
 :root {
-  --sky-top: #ffd9ec;
-  --sky-bottom: #bfe9ff;
-  --ink: #2b2140;
-  --ink-soft: #5c4d7a;
-  --bubblegum: #ff6fa5;
-  --bubblegum-dark: #e8508a;
-  --mint: #37d6c0;
-  --mint-dark: #1fb39f;
-  --paper: #fff7fc;
-  --paper-line: #f0d9ea;
-  --gold: #ffc94a;
-  --font-display: "Press Start 2P", monospace;
+  --bg-top: #16220e;
+  --bg-bottom: #050603;
+  --ink: #eef4e6;
+  --ink-soft: #b9c9ab;
+  --forest: #6fae2e;
+  --forest-dark: #3f6b1f;
+  --forest-light: #8fc656;
+  --gold: #ffce54;
+  --paper: #f4f1e2;
+  --paper-line: #d9d3b8;
+  --paper-ink: #241d10;
+  --paper-ink-soft: #6b5c3a;
+  --badge-black: #0d0f0a;
+  --font-display: "Bungee", system-ui, sans-serif;
   --font-body: "Baloo 2", system-ui, sans-serif;
 }
 
@@ -28,7 +30,7 @@ body {
 body {
   font-family: var(--font-body);
   color: var(--ink);
-  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 100%);
+  background: linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -77,9 +79,9 @@ h1, h2, h3 {
 }
 
 .title {
-  font-size: 22px;
-  color: var(--bubblegum-dark);
-  text-shadow: 2px 2px 0 var(--paper);
+  font-size: 20px;
+  color: var(--forest-light);
+  text-shadow: 2px 2px 0 var(--badge-black);
   letter-spacing: 1px;
 }
 
@@ -87,16 +89,16 @@ h1, h2, h3 {
   position: absolute;
   right: 0;
   background: var(--paper);
-  border: 3px solid var(--ink);
+  border: 3px solid var(--badge-black);
   border-radius: 10px;
   font-size: 18px;
   padding: 6px 10px;
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: 3px 3px 0 var(--badge-black);
 }
 
 .icon-btn:active {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: 1px 1px 0 var(--badge-black);
 }
 
 .canvas-wrap {
@@ -105,8 +107,8 @@ h1, h2, h3 {
   max-width: 92vw;
   border-radius: 20px;
   overflow: hidden;
-  border: 4px solid var(--ink);
-  box-shadow: 6px 6px 0 var(--ink);
+  border: 4px solid var(--badge-black);
+  box-shadow: 6px 6px 0 var(--badge-black), 0 0 0 3px var(--forest);
   touch-action: manipulation;
 }
 
@@ -123,16 +125,16 @@ h1, h2, h3 {
   right: 0;
   text-align: center;
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 26px;
   color: #fff;
-  text-shadow: 3px 3px 0 var(--ink);
+  text-shadow: 3px 3px 0 var(--badge-black);
   pointer-events: none;
 }
 
 .overlay {
   position: absolute;
   inset: 0;
-  background: rgba(43, 33, 64, 0.55);
+  background: rgba(13, 15, 10, 0.68);
   backdrop-filter: blur(1px);
   display: flex;
   flex-direction: column;
@@ -145,10 +147,10 @@ h1, h2, h3 {
 
 .overlay-lede {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 14px;
   color: #fff;
   line-height: 1.6;
-  text-shadow: 2px 2px 0 var(--ink);
+  text-shadow: 2px 2px 0 var(--badge-black);
 }
 
 .username-form {
@@ -162,11 +164,13 @@ h1, h2, h3 {
 .text-input {
   padding: 12px 14px;
   border-radius: 12px;
-  border: 3px solid var(--ink);
+  border: 3px solid var(--badge-black);
   font-size: 16px;
   font-family: var(--font-body);
   font-weight: 700;
   text-align: center;
+  color: var(--paper-ink);
+  background: #fff;
 }
 
 .text-input:focus {
@@ -177,23 +181,23 @@ h1, h2, h3 {
 .primary-btn {
   padding: 12px 20px;
   border-radius: 12px;
-  border: 3px solid var(--ink);
-  background: var(--bubblegum);
+  border: 3px solid var(--badge-black);
+  background: var(--forest);
   color: #fff;
   font-weight: 800;
   font-size: 16px;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--badge-black);
 }
 
 .primary-btn:active {
   transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: 1px 1px 0 var(--badge-black);
 }
 
 .challenge-banner {
-  background: #fff1f8;
-  color: var(--ink);
-  border: 2px dashed #fff;
+  background: var(--paper);
+  color: var(--paper-ink);
+  border: 2px dashed var(--forest-light);
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 13px;
@@ -205,17 +209,17 @@ h1, h2, h3 {
 .secondary-btn {
   padding: 10px 18px;
   border-radius: 12px;
-  border: 3px solid var(--ink);
-  background: var(--mint);
-  color: var(--ink);
+  border: 3px solid var(--badge-black);
+  background: var(--gold);
+  color: var(--paper-ink);
   font-weight: 800;
   font-size: 14px;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--badge-black);
 }
 
 .secondary-btn:active {
   transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: 1px 1px 0 var(--badge-black);
 }
 
 .link-btn {
@@ -276,23 +280,23 @@ h1, h2, h3 {
   width: 260px;
   max-width: 92vw;
   background: var(--paper);
-  border: 4px solid var(--ink);
+  border: 4px solid var(--badge-black);
   border-radius: 18px;
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: 6px 6px 0 var(--badge-black);
   padding: 18px;
 }
 
 .leaderboard-title {
-  font-size: 14px;
-  color: var(--bubblegum-dark);
+  font-size: 13px;
+  color: var(--forest-dark);
   margin-bottom: 12px;
   text-align: center;
 }
 
 .leaderboard-note {
   font-size: 11px;
-  color: var(--ink-soft);
-  background: #fff1f8;
+  color: var(--paper-ink-soft);
+  background: #fff;
   border: 2px dashed var(--paper-line);
   border-radius: 10px;
   padding: 8px;
@@ -302,7 +306,7 @@ h1, h2, h3 {
 
 .leaderboard-empty {
   font-size: 13px;
-  color: var(--ink-soft);
+  color: var(--paper-ink-soft);
   text-align: center;
   font-weight: 700;
 }
@@ -329,7 +333,7 @@ h1, h2, h3 {
 
 .rank {
   font-weight: 800;
-  color: var(--mint-dark);
+  color: var(--forest-dark);
   font-size: 13px;
   text-align: center;
 }
@@ -339,7 +343,7 @@ h1, h2, h3 {
   height: 28px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--badge-black);
 }
 
 .mini-avatar-blank {
@@ -349,6 +353,7 @@ h1, h2, h3 {
 .lb-name {
   font-size: 13px;
   font-weight: 700;
+  color: var(--paper-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -357,7 +362,7 @@ h1, h2, h3 {
 .lb-score {
   font-size: 13px;
   font-weight: 800;
-  color: var(--bubblegum-dark);
+  color: var(--forest-dark);
 }
 
 @media (prefers-reduced-motion: reduce) {
