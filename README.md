@@ -9,8 +9,11 @@ Web Audio API (no audio files to source or host).
 - Enter any Roblox username → the game fetches their live avatar headshot via a
   server-side API route (avoids Roblox's CORS restrictions) and uses it as the bird.
 - Classic flappy physics: gravity, flap impulse, scrolling pipes, collision detection.
-- Score = number of pipes cleared. Per-player all-time high is stored in the browser
-  (`localStorage`) and compared every run.
+- Score = number of pipes cleared, with a gentle difficulty ramp — pipes speed up
+  slightly with every point, capped so it never becomes unfair.
+- The device remembers the last Roblox username you played as (like a lightweight
+  local profile) and jumps straight back in next time — no re-typing needed. "Switch
+  player" clears it.
 - Global Top 10 leaderboard, backed by Vercel KV (Redis).
 - Sounds, all synthesized in-browser: a soft ambient hum, a flap chirp, a score blip,
   a game-over tone, and a triumphant fanfare the moment you beat your all-time high.
