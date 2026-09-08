@@ -7,7 +7,6 @@ type OscType = OscillatorType;
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private ambientGain: GainNode | null = null;
   private ambientNodes: { stop: () => void } | null = null;
   private muted = false;
 
@@ -107,39 +106,69 @@ export class SoundEngine {
     this.tone(440, ctx.currentTime, 0.06, { type: "sine", peak: 0.15 });
   }
 
-  /** Starts a very soft, looping ambient pad + purring pulse. Call once. */
+  /** Starts a soft, cozy looping tune: a gentle sustained pad under a
+   *  quiet plucked pentatonic arpeggio, like a little music box. Call once. */
   startAmbient() {
     if (this.ambientNodes) return;
     const ctx = this.ensureCtx();
-    const gain = ctx.createGain();
-    gain.gain.value = 0.05;
-    gain.connect(this.masterGain!);
-    this.ambientGain = gain;
 
-    const osc1 = ctx.createOscillator();
-    osc1.type = "sine";
-    osc1.frequency.value = 220;
-    const osc2 = ctx.createOscillator();
-    osc2.type = "sine";
-    osc2.frequency.value = 330;
+    // Shared warm lowpass so everything sits in a soft, rounded timbre
+    // instead of sounding like raw synth tones.
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1600;
+    filter.Q.value = 0.7;
+    filter.connect(this.masterGain!);
 
+    // Sustained root + fifth pad, very quiet — the "cozy" bed.
+    const padGain = ctx.createGain();
+    padGain.gain.value = 0.045;
+    padGain.connect(filter);
+    const padOsc1 = ctx.createOscillator();
+    padOsc1.type = "sine";
+    padOsc1.frequency.value = 130.81; // C3
+    const padOsc2 = ctx.createOscillator();
+    padOsc2.type = "sine";
+    padOsc2.frequency.value = 196.0; // G3
+    padOsc1.connect(padGain);
+    padOsc2.connect(padGain);
+    padOsc1.start();
+    padOsc2.start();
+
+    // Slow filter wobble so the pad breathes instead of droning flatly.
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.15;
+    lfo.frequency.value = 0.08;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.03;
+    lfoGain.gain.value = 220;
     lfo.connect(lfoGain);
-    lfoGain.connect(gain.gain);
-
-    osc1.connect(gain);
-    osc2.connect(gain);
-    osc1.start();
-    osc2.start();
+    lfoGain.connect(filter.frequency);
     lfo.start();
+
+    // Gentle plucked pentatonic arpeggio loop — a little repeating tune
+    // rather than a static drone.
+    const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 392.0, 329.63, 293.66]; // C D E G A G E D
+    let step = 0;
+    let stopped = false;
+    let timeoutId: number;
+    const playStep = () => {
+      if (stopped) return;
+      const freq = scale[step % scale.length];
+      this.tone(freq, ctx.currentTime, 0.5, {
+        type: "triangle",
+        peak: 0.06,
+        destination: filter,
+      });
+      step += 1;
+      timeoutId = window.setTimeout(playStep, 550);
+    };
+    timeoutId = window.setTimeout(playStep, 400);
 
     this.ambientNodes = {
       stop: () => {
-        osc1.stop();
-        osc2.stop();
+        stopped = true;
+        window.clearTimeout(timeoutId);
+        padOsc1.stop();
+        padOsc2.stop();
         lfo.stop();
       },
     };
