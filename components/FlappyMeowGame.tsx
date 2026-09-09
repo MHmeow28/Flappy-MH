@@ -10,6 +10,7 @@ interface AvatarInfo {
   username: string;
   displayName: string;
   avatarUrl: string;
+  fullBodyUrl: string | null;
 }
 
 interface LeaderboardEntry {
@@ -86,6 +87,8 @@ export default function FlappyMeowGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const physicsRef = useRef<PhysicsState>(freshPhysics());
   const avatarImgRef = useRef<HTMLImageElement | null>(null);
+  const shareAvatarImgRef = useRef<HTMLImageElement | null>(null);
+  const shareCardRef = useRef<{ blob: Blob; file: File } | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   const cloudsRef = useRef(
@@ -150,32 +153,40 @@ export default function FlappyMeowGame() {
         setScreen("menu");
         return;
       }
-      const loadImage = (useCors: boolean) =>
+      const loadImage = (src: string, useCors: boolean) =>
         new Promise<HTMLImageElement>((resolve, reject) => {
           const img = new Image();
           if (useCors) img.crossOrigin = "anonymous";
           img.onload = () => resolve(img);
           img.onerror = () => reject(new Error("image failed to load"));
-          img.src = data.avatarUrl;
+          img.src = src;
         });
 
-      let img: HTMLImageElement;
+      // The bird sprite is only ever drawn on-screen, never exported, so a
+      // plain (non-CORS) load is fine and most reliable here.
+      let headshotImg: HTMLImageElement;
+      try {
+        headshotImg = await loadImage(data.avatarUrl, false);
+      } catch {
+        setAvatarError("Got the player, but couldn't load their avatar image.");
+        setScreen("menu");
+        return;
+      }
+      avatarImgRef.current = headshotImg;
+
+      // The share card needs a CORS-clean image so the canvas can be
+      // exported to a PNG. Prefer the full-body render; fall back to the
+      // headshot if the full-body thumbnail wasn't available.
+      const shareSrc = data.fullBodyUrl || data.avatarUrl;
       let exportable = true;
       try {
-        img = await loadImage(true);
+        shareAvatarImgRef.current = await loadImage(shareSrc, true);
       } catch {
         exportable = false;
-        try {
-          img = await loadImage(false);
-        } catch {
-          setAvatarError("Got the player, but couldn't load their avatar image.");
-          setScreen("menu");
-          return;
-        }
+        shareAvatarImgRef.current = null;
       }
-
-      avatarImgRef.current = img;
       avatarExportableRef.current = exportable;
+
       setAvatar(data);
       setScreen("ready");
       try {
@@ -230,6 +241,183 @@ export default function FlappyMeowGame() {
     sound?.flap();
   }, [screen, sound]);
 
+  // ---------- Shareable image card (avatar + score + Meow Hikers badge look) ----------
+  // Takes the final score/newHigh explicitly (instead of reading React state)
+  // so it can be called the instant a run ends, without waiting on a re-render.
+  const buildShareCardBlob = useCallback(
+    async (finalScore: number, newHigh: boolean): Promise<Blob | null> => {
+      if (!avatar) return null;
+      const W = 1080;
+      const H = 1920;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      const BODY_FONT = "'Baloo 2', sans-serif";
+      const DISPLAY_FONT = "Bungee, sans-serif";
+
+      // Explicitly request these font families so the canvas doesn't fall
+      // back to a default font (which previously caused wildly wrong sizes).
+      try {
+        await Promise.all([
+          document.fonts?.load(`700 40px ${BODY_FONT}`),
+          document.fonts?.load(`64px ${DISPLAY_FONT}`),
+        ]);
+      } catch {
+        // font loading API unavailable — canvas will use fallback fonts
+      }
+
+      // Shrinks a font until `text` fits within maxWidth, so long names or
+      // hostnames can never overflow the card's edges.
+      const fitFont = (
+        text: string,
+        maxWidth: number,
+        family: string,
+        weight: string,
+        startPx: number,
+        minPx = 16
+      ) => {
+        let px = startPx;
+        ctx.font = `${weight} ${px}px ${family}`;
+        while (px > minPx && ctx.measureText(text).width > maxWidth) {
+          px -= 2;
+          ctx.font = `${weight} ${px}px ${family}`;
+        }
+        return px;
+      };
+
+      try {
+        const cx = W / 2;
+        const safeWidth = W - 140;
+
+        // background
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, "#1b2a12");
+        bg.addColorStop(1, "#05060a");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        // mountain ridge
+        ctx.fillStyle = "rgba(95, 156, 49, 0.28)";
+        ctx.beginPath();
+        ctx.moveTo(0, 620);
+        ctx.lineTo(140, 420);
+        ctx.lineTo(250, 520);
+        ctx.lineTo(420, 260);
+        ctx.lineTo(560, 460);
+        ctx.lineTo(700, 320);
+        ctx.lineTo(840, 500);
+        ctx.lineTo(980, 380);
+        ctx.lineTo(W, 560);
+        ctx.lineTo(W, 760);
+        ctx.lineTo(0, 760);
+        ctx.closePath();
+        ctx.fill();
+
+        // pine trees along the bottom edge, well clear of the text above
+        const drawPineBig = (x: number, y: number, scale: number) => {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.scale(scale, scale);
+          ctx.fillStyle = "rgba(95, 156, 49, 0.4)";
+          ctx.beginPath();
+          ctx.moveTo(0, -70);
+          ctx.lineTo(28, -20);
+          ctx.lineTo(14, -20);
+          ctx.lineTo(36, 16);
+          ctx.lineTo(18, 16);
+          ctx.lineTo(40, 52);
+          ctx.lineTo(-40, 52);
+          ctx.lineTo(-18, 16);
+          ctx.lineTo(-36, 16);
+          ctx.lineTo(-14, -20);
+          ctx.lineTo(-28, -20);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillRect(-8, 52, 16, 16);
+          ctx.restore();
+        };
+        [
+          [120, 1800, 1.1],
+          [960, 1820, 1.3],
+          [280, 1860, 0.9],
+          [820, 1880, 1.0],
+        ].forEach(([x, y, s]) => drawPineBig(x, y, s));
+
+        ctx.textAlign = "center";
+
+        // title
+        ctx.fillStyle = "#8fc656";
+        fitFont("FLAPPY MEOW", safeWidth, DISPLAY_FONT, "400", 64);
+        ctx.fillText("FLAPPY MEOW", cx, 150);
+
+        ctx.fillStyle = "#eef4e6";
+        fitFont("MEOW HIKERS EDITION", safeWidth, BODY_FONT, "700", 30);
+        ctx.fillText("MEOW HIKERS EDITION", cx, 196);
+
+        // badge ring behind the full-body avatar
+        const ringCy = 720;
+        const ringRadius = 380;
+        ctx.save();
+        ctx.strokeStyle = "#6fae2e";
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.arc(cx, ringCy, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // full-body avatar, unclipped (source PNG has a transparent
+        // background) so the whole character shows instead of just a headshot
+        const bodyImg = shareAvatarImgRef.current;
+        if (bodyImg) {
+          const drawSize = 660;
+          ctx.drawImage(bodyImg, cx - drawSize / 2, ringCy - drawSize / 2, drawSize, drawSize);
+        }
+
+        // player name
+        ctx.fillStyle = "#ffffff";
+        fitFont(avatar.displayName, safeWidth, BODY_FONT, "700", 46);
+        ctx.fillText(avatar.displayName, cx, 1180);
+
+        // score
+        ctx.fillStyle = "#ffce54";
+        fitFont(String(finalScore), safeWidth, DISPLAY_FONT, "400", 150);
+        ctx.fillText(String(finalScore), cx, 1370);
+
+        ctx.fillStyle = "#eef4e6";
+        fitFont("PIPES CLEARED", safeWidth, BODY_FONT, "700", 36);
+        ctx.fillText("PIPES CLEARED", cx, 1420);
+
+        if (newHigh) {
+          ctx.fillStyle = "#ffce54";
+          const trophyText = "NEW ALL-TIME HIGH!";
+          fitFont(trophyText, safeWidth, BODY_FONT, "700", 34);
+          ctx.fillText(`🏆 ${trophyText}`, cx, 1478);
+        }
+
+        // footer CTA
+        ctx.fillStyle = "#b9c9ab";
+        fitFont("Think you can beat me?", safeWidth, BODY_FONT, "700", 32);
+        ctx.fillText("Think you can beat me?", cx, 1640);
+
+        ctx.fillStyle = "#8fc656";
+        const hostText = window.location.host;
+        fitFont(hostText, safeWidth, BODY_FONT, "700", 34);
+        ctx.fillText(hostText, cx, 1690);
+
+        return await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((b) => resolve(b), "image/png");
+        });
+      } catch {
+        // most likely a tainted-canvas SecurityError from a non-CORS avatar image
+        return null;
+      }
+    },
+    [avatar]
+  );
+
   const endGame = useCallback(
     async (finalScore: number) => {
       physicsRef.current.running = false;
@@ -247,6 +435,25 @@ export default function FlappyMeowGame() {
       }
       setIsNewHigh(newHigh);
       sound?.[newHigh ? "newHighScore" : "gameOver"]();
+
+      // Build the share card right away in the background. iOS requires
+      // navigator.share() to be invoked promptly within the tap's gesture —
+      // if we waited to build this until the "Share image" button was
+      // pressed, the async canvas/font work would eat up that window and
+      // the share sheet would silently fail to open.
+      shareCardRef.current = null;
+      buildShareCardBlob(finalScore, newHigh)
+        .then((blob) => {
+          if (blob) {
+            shareCardRef.current = {
+              blob,
+              file: new File([blob], "flappy-meow-score.png", { type: "image/png" }),
+            };
+          }
+        })
+        .catch(() => {
+          // share card is a nice-to-have; failing quietly is fine
+        });
 
       if (avatar) {
         try {
@@ -267,7 +474,7 @@ export default function FlappyMeowGame() {
         }
       }
     },
-    [avatar, sound, refreshLeaderboard]
+    [avatar, sound, refreshLeaderboard, buildShareCardBlob]
   );
 
   const handleShare = useCallback(async () => {
@@ -297,151 +504,16 @@ export default function FlappyMeowGame() {
     setTimeout(() => setShareStatus("idle"), 2500);
   }, [avatar, score]);
 
-  // ---------- Shareable image card (avatar + score + Meow Hikers badge look) ----------
-  const buildShareCardBlob = useCallback(async (): Promise<Blob | null> => {
-    if (!avatar) return null;
-    const W = 1080;
-    const H = 1920;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    try {
-      await document.fonts?.ready;
-    } catch {
-      // font loading API unavailable — canvas will just use fallback fonts
-    }
-
-    try {
-      // background
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, "#1b2a12");
-      bg.addColorStop(1, "#05060a");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
-
-      // mountain ridge
-      ctx.fillStyle = "rgba(95, 156, 49, 0.28)";
-      ctx.beginPath();
-      ctx.moveTo(0, 620);
-      ctx.lineTo(140, 420);
-      ctx.lineTo(250, 520);
-      ctx.lineTo(420, 260);
-      ctx.lineTo(560, 460);
-      ctx.lineTo(700, 320);
-      ctx.lineTo(840, 500);
-      ctx.lineTo(980, 380);
-      ctx.lineTo(W, 560);
-      ctx.lineTo(W, 760);
-      ctx.lineTo(0, 760);
-      ctx.closePath();
-      ctx.fill();
-
-      // pine trees
-      const drawPineBig = (x: number, y: number, scale: number) => {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(scale, scale);
-        ctx.fillStyle = "rgba(95, 156, 49, 0.4)";
-        ctx.beginPath();
-        ctx.moveTo(0, -70);
-        ctx.lineTo(28, -20);
-        ctx.lineTo(14, -20);
-        ctx.lineTo(36, 16);
-        ctx.lineTo(18, 16);
-        ctx.lineTo(40, 52);
-        ctx.lineTo(-40, 52);
-        ctx.lineTo(-18, 16);
-        ctx.lineTo(-36, 16);
-        ctx.lineTo(-14, -20);
-        ctx.lineTo(-28, -20);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillRect(-8, 52, 16, 16);
-        ctx.restore();
-      };
-      [
-        [120, 1560, 1.1],
-        [960, 1580, 1.3],
-        [280, 1620, 0.9],
-        [820, 1640, 1.0],
-      ].forEach(([x, y, s]) => drawPineBig(x, y, s));
-
-      // badge ring + avatar
-      const cx = W / 2;
-      const cy = 560;
-      const ringRadius = 300;
-      ctx.save();
-      ctx.strokeStyle = "#6fae2e";
-      ctx.lineWidth = 14;
-      ctx.beginPath();
-      ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-
-      const avatarRadius = 260;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, avatarRadius, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.fillStyle = "#0d0f0a";
-      ctx.fillRect(cx - avatarRadius, cy - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-      const avatarImg = avatarImgRef.current;
-      if (avatarImg) {
-        ctx.drawImage(avatarImg, cx - avatarRadius, cy - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-      }
-      ctx.restore();
-
-      ctx.textAlign = "center";
-
-      // title
-      ctx.fillStyle = "#8fc656";
-      ctx.font = "64px Bungee, sans-serif";
-      ctx.fillText("FLAPPY MEOW", cx, 190);
-
-      ctx.fillStyle = "#eef4e6";
-      ctx.font = "700 28px Baloo 2, sans-serif";
-      ctx.fillText("MEOW HIKERS EDITION", cx, 236);
-
-      // player name
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "700 46px Baloo 2, sans-serif";
-      ctx.fillText(avatar.displayName, cx, 950);
-
-      // score
-      ctx.fillStyle = "#ffce54";
-      ctx.font = "160px Bungee, sans-serif";
-      ctx.fillText(String(score), cx, 1090);
-
-      ctx.fillStyle = "#eef4e6";
-      ctx.font = "700 38px Baloo 2, sans-serif";
-      ctx.fillText("PIPES CLEARED", cx, 1140);
-
-      if (isNewHigh) {
-        ctx.fillStyle = "#ffce54";
-        ctx.font = "700 36px Baloo 2, sans-serif";
-        ctx.fillText("🏆 NEW ALL-TIME HIGH!", cx, 1200);
-      }
-
-      // footer CTA
-      ctx.fillStyle = "#b9c9ab";
-      ctx.font = "700 32px Baloo 2, sans-serif";
-      ctx.fillText("Think you can beat me?", cx, 1780);
-      ctx.fillStyle = "#8fc656";
-      ctx.font = "700 36px Baloo 2, sans-serif";
-      ctx.fillText(window.location.host, cx, 1832);
-
-      return await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((b) => resolve(b), "image/png");
-      });
-    } catch {
-      // most likely a tainted-canvas SecurityError from a non-CORS avatar image
-      return null;
-    }
-  }, [avatar, score, isNewHigh]);
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const handleSaveImage = useCallback(async () => {
     if (!avatarExportableRef.current) {
@@ -449,23 +521,17 @@ export default function FlappyMeowGame() {
       setTimeout(() => setShareStatus("idle"), 2500);
       return;
     }
-    const blob = await buildShareCardBlob();
+    // Use the precomputed card if it's ready; otherwise build one now.
+    const blob = shareCardRef.current?.blob ?? (await buildShareCardBlob(score, isNewHigh));
     if (!blob) {
       setShareStatus("unavailable");
       setTimeout(() => setShareStatus("idle"), 2500);
       return;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `flappy-meow-${avatar?.username ?? "score"}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `flappy-meow-${avatar?.username ?? "score"}.png`);
     setShareStatus("saved");
     setTimeout(() => setShareStatus("idle"), 2500);
-  }, [avatar, buildShareCardBlob]);
+  }, [avatar, score, isNewHigh, buildShareCardBlob]);
 
   const handleShareImage = useCallback(async () => {
     if (!avatar) return;
@@ -475,38 +541,59 @@ export default function FlappyMeowGame() {
       await handleShare();
       return;
     }
-    const blob = await buildShareCardBlob();
+
+    const text = `I scored ${score} in Flappy Meow flying as ${avatar.displayName}! Think you can beat me?`;
+
+    // Prefer the card that was already built in the background right when
+    // the run ended — calling navigator.share() with as little delay as
+    // possible after the tap is what makes it actually open on iOS.
+    const ready = shareCardRef.current;
+    if (ready) {
+      const canShareFiles =
+        typeof navigator.canShare === "function" && navigator.canShare({ files: [ready.file] });
+      if (canShareFiles) {
+        try {
+          await navigator.share({ files: [ready.file], title: "Flappy Meow", text });
+          setShareStatus("shared");
+        } catch {
+          // user cancelled the native share sheet — not an error
+        }
+      } else {
+        // No file-sharing support in this browser (common on desktop, and
+        // some older mobile browsers) — just download the image instead.
+        downloadBlob(ready.blob, `flappy-meow-${avatar.username}.png`);
+        setShareStatus("saved");
+      }
+      setTimeout(() => setShareStatus("idle"), 2500);
+      return;
+    }
+
+    // Card wasn't ready yet (rare — only if the player taps within a few
+    // hundred ms of the game-over screen appearing). Build it now; the
+    // share sheet may or may not open depending on the browser, so fall
+    // back to a download if share() isn't available or is rejected.
+    const blob = await buildShareCardBlob(score, isNewHigh);
     if (!blob) {
       setShareStatus("unavailable");
       setTimeout(() => setShareStatus("idle"), 2500);
       return;
     }
     const file = new File([blob], "flappy-meow-score.png", { type: "image/png" });
-    const text = `I scored ${score} in Flappy Meow flying as ${avatar.displayName}! Think you can beat me?`;
-
     const canShareFiles =
       typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
-
     if (canShareFiles) {
       try {
         await navigator.share({ files: [file], title: "Flappy Meow", text });
         setShareStatus("shared");
       } catch {
-        // user cancelled the native share sheet — not an error
+        // user cancelled — not an error
       }
     } else {
-      // no file-sharing support in this browser (common on desktop) —
-      // just download the image instead so it's still usable.
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `flappy-meow-${avatar.username}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `flappy-meow-${avatar.username}.png`);
       setShareStatus("saved");
     }
     setTimeout(() => setShareStatus("idle"), 2500);
-  }, [avatar, score, buildShareCardBlob, handleShare]);
+  }, [avatar, score, isNewHigh, buildShareCardBlob, handleShare]);
 
   // ---------- Input handling ----------
   useEffect(() => {
